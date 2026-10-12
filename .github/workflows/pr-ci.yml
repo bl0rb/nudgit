@@ -115,7 +115,7 @@ jobs:
         run: ditto -c -k --keepParent dist/nudgit.app nudgit-macos.zip
 
       - name: Upload app bundle artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nudgit-macos
           path: nudgit-macos.zip
@@ -138,7 +138,7 @@ jobs:
         run: npm run extension
 
       - name: Upload extension artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nudgit-chrome-extension
           path: dist/nudgit-chrome-extension.zip
