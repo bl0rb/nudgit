@@ -27,7 +27,7 @@
       "description": "Toggle nudgit on the current tab"
     }
   },
-  "permissions": ["activeTab", "scripting", "storage", "downloads"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads", "debugger"],
   "background": {
     "service_worker": "service-worker.js",
     "type": "module"

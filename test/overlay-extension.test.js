@@ -44,7 +44,7 @@ const tick = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Loads the overlay as an extension content script into a fresh jsdom page.
- * @param {(env: { window: any, ctx: any, host: HTMLElement, sent: any[], blobs: string[], downloads: string[], respond: (fn: (msg: any) => any) => void }) => Promise<void>} run
+ * @param {(env: { window: any, ctx: any, host: HTMLElement, sent: any[], onMessage: Function[], blobs: string[], downloads: string[], respond: (fn: (msg: any) => any) => void }) => Promise<void>} run
  */
 async function withExtensionOverlay(run) {
   const dom = new JSDOM(
@@ -68,9 +68,12 @@ async function withExtensionOverlay(run) {
     Object.defineProperty(globalThis, name, { value, writable: true, configurable: true, enumerable: true });
   };
   for (const name of GLOBAL_NAMES) if (name in window) setGlobal(name, /** @type {any} */ (window)[name]);
+  /** @type {Function[]} */
+  const onMessage = [];
   setGlobal('chrome', {
     runtime: {
       id: 'test-extension-id',
+      onMessage: { addListener: (/** @type {Function} */ fn) => onMessage.push(fn) },
       sendMessage: async (/** @type {any} */ msg) => {
         sent.push(msg);
         return responder(msg);
@@ -97,6 +100,7 @@ async function withExtensionOverlay(run) {
       ctx: window.__uceOverlay,
       host,
       sent,
+      onMessage,
       blobs,
       downloads,
       respond: (fn) => {
@@ -282,5 +286,53 @@ test('window.__nudgitToggle flips visibility and returns the new state', async (
     assert.equal(env.window.__nudgitToggle(), true);
     assert.equal(button.textContent, 'Jetzt speichern');
     assert.equal(env.ctx.isVisible(), true);
+  });
+});
+
+test('Record: toggles the debugger via the worker, survives reloads, stops on close or when Chrome detaches', async () => {
+  await withExtensionOverlay(async (env) => {
+    const recordBtn = /** @type {HTMLButtonElement} */ (
+      [...env.host.shadowRoot.querySelectorAll('.uce-toolbar button')].find((b) => /Record|Aufnahme/.test(String(b.textContent)))
+    );
+    assert.ok(recordBtn, 'Record button in extension mode');
+    env.respond(() => ({ ok: true }));
+
+    recordBtn.click();
+    await tick();
+    assert.deepEqual(env.sent.at(-1), { type: 'nudgit:recording', on: true });
+    assert.equal(env.ctx.isRecording(), true);
+    assert.ok(recordBtn.classList.contains('uce-active'));
+    assert.equal(env.window.sessionStorage.getItem('uce:recording'), '1');
+
+    // script-generated clicks (and clicks on the overlay) never trigger a screenshot
+    const count = env.sent.length;
+    env.window.document.getElementById('save-btn').click();
+    await tick();
+    assert.equal(env.sent.length, count);
+
+    // the user dismissed Chrome's debugging bar
+    for (const fn of env.onMessage) fn({ type: 'nudgit:recording-stopped' });
+    assert.equal(env.ctx.isRecording(), false);
+    assert.ok(!recordBtn.classList.contains('uce-active'));
+    assert.equal(env.window.sessionStorage.getItem('uce:recording'), null);
+
+    recordBtn.click();
+    await tick();
+    env.ctx.setVisible(false);
+    await tick();
+    assert.equal(env.ctx.isRecording(), false, 'closing nudgit stops recording');
+    assert.deepEqual(env.sent.filter((m) => m.type === 'nudgit:recording').at(-1), { type: 'nudgit:recording', on: false });
+  });
+});
+
+test('Record: a failed attach shows an error toast and stays off', async () => {
+  await withExtensionOverlay(async (env) => {
+    env.respond((msg) => (msg.type === 'nudgit:recording' ? { ok: false, error: 'Cannot attach' } : { ok: true }));
+    env.ctx.toggleRecording();
+    await tick();
+    assert.equal(env.ctx.isRecording(), false);
+    const toast = env.host.shadowRoot.querySelector('.uce-toast');
+    assert.match(String(toast.textContent), /Cannot attach/);
+    assert.ok(toast.classList.contains('uce-error'));
   });
 });

@@ -11,6 +11,8 @@ import {
   handleTabRemoved,
   handleMessage,
   registerListeners,
+  screenshotFilename,
+  SCREENSHOT_DIR,
 } from '../extension/service-worker.js';
 
 /**
@@ -29,7 +31,11 @@ function createChrome(opts = {}) {
     badgeText: /** @type {Array<{ tabId: number, text: string }>} */ ([]),
     badgeColor: /** @type {any[]} */ ([]),
     download: /** @type {any[]} */ ([]),
+    debugger: /** @type {any[]} */ ([]),
+    sendMessage: /** @type {any[]} */ ([]),
   };
+  /** @type {Set<number>} */
+  const attached = new Set();
   /** @type {Record<string, Function[]>} */
   const listeners = {};
   const event = (/** @type {string} */ name) => ({
@@ -57,6 +63,29 @@ function createChrome(opts = {}) {
       onUpdated: event('onUpdated'),
       onRemoved: event('onRemoved'),
       query: async () => [{ id: 99 }],
+      sendMessage: async (/** @type {number} */ tabId, /** @type {any} */ msg) => void calls.sendMessage.push([tabId, msg]),
+    },
+    debugger: {
+      attached,
+      attachError: /** @type {Error|null} */ (null),
+      onDetach: event('onDetach'),
+      attach: async (/** @type {any} */ target, /** @type {string} */ version) => {
+        calls.debugger.push(['attach', target.tabId, version]);
+        if (api.debugger.attachError) throw api.debugger.attachError;
+        if (attached.has(target.tabId)) throw new Error(`Another debugger is already attached to the tab with id: ${target.tabId}.`);
+        attached.add(target.tabId);
+      },
+      detach: async (/** @type {any} */ target) => {
+        calls.debugger.push(['detach', target.tabId]);
+        if (!attached.delete(target.tabId)) throw new Error(`Debugger is not attached to the tab with id: ${target.tabId}.`);
+      },
+      sendCommand: async (/** @type {any} */ target, /** @type {string} */ method, /** @type {any} */ params) => {
+        calls.debugger.push(['command', target.tabId, method, params]);
+        if (!attached.has(target.tabId)) throw new Error('Debugger is not attached');
+        if (method === 'Page.getLayoutMetrics') return { cssContentSize: { x: 0, y: 0, width: 1280.4, height: 4000 } };
+        if (method === 'Page.captureScreenshot') return { data: 'iVBORw0KGgo=' };
+        throw new Error('unknown method ' + method);
+      },
     },
     scripting: {
       executeScript: async (/** @type {any} */ injection) => {
@@ -268,7 +297,7 @@ test('nudgit:visibility from the page (x button) updates tracking and badge for 
 test('registerListeners wires icon click, command, tab events and messages', async () => {
   const api = createChrome();
   registerListeners(api);
-  for (const name of ['onClicked', 'onCommand', 'onUpdated', 'onRemoved', 'onMessage']) {
+  for (const name of ['onClicked', 'onCommand', 'onUpdated', 'onRemoved', 'onMessage', 'onDetach']) {
     assert.equal(api.listeners[name]?.length, 1, `${name} listener registered`);
   }
 
@@ -298,4 +327,70 @@ test('registerListeners wires icon click, command, tab events and messages', asy
   assert.deepEqual(responses, [{ ok: true, id: 7 }]);
 
   assert.equal(api.listeners.onMessage[0]({ type: 'unrelated' }, {}, () => {}), false);
+});
+
+test('nudgit:recording attaches/detaches the debugger for the sender tab; repeats are no-ops', async () => {
+  const api = createChrome();
+  const sender = { id: 'test-ext', tab: { id: 5 } };
+
+  assert.deepEqual(await handleMessage(api, { type: 'nudgit:recording', on: true }, sender), { ok: true });
+  assert.deepEqual([...api.debugger.attached], [5]);
+  assert.deepEqual(api.calls.debugger[0], ['attach', 5, '1.3']);
+  assert.deepEqual(await handleMessage(api, { type: 'nudgit:recording', on: true }, sender), { ok: true }, 'already attached');
+
+  assert.deepEqual(await handleMessage(api, { type: 'nudgit:recording', on: false }, sender), { ok: true });
+  assert.deepEqual(await handleMessage(api, { type: 'nudgit:recording', on: false }, sender), { ok: true }, 'not attached');
+  assert.equal(api.debugger.attached.size, 0);
+
+  api.debugger.attachError = new Error('Cannot access a chrome:// URL');
+  assert.deepEqual(await handleMessage(api, { type: 'nudgit:recording', on: true }, sender), { ok: false, error: 'Cannot access a chrome:// URL' });
+  const noTab = /** @type {any} */ (await handleMessage(api, { type: 'nudgit:recording', on: true }, { id: 'test-ext' }));
+  assert.equal(noTab.ok, false);
+});
+
+test('nudgit:screenshot saves a full-page PNG to the screenshot folder without a Save dialog', async () => {
+  const api = createChrome();
+  const res = /** @type {any} */ (await handleMessage(api, { type: 'nudgit:screenshot', url: 'https://app.example.com/x?y=1' }, { id: 'test-ext', tab: { id: 5 } }));
+
+  assert.equal(res.ok, true);
+  const capture = api.calls.debugger.find((c) => c[2] === 'Page.captureScreenshot');
+  assert.deepEqual(capture[3], { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: 1281, height: 4000, scale: 1 } });
+  assert.equal(api.calls.download.length, 1);
+  const dl = api.calls.download[0];
+  assert.equal(dl.url, 'data:image/png;base64,iVBORw0KGgo=');
+  assert.equal(dl.saveAs, false);
+  assert.equal(dl.conflictAction, 'uniquify');
+  assert.equal(dl.filename, res.filename);
+  assert.match(dl.filename, /^nudgit-screenshots\/\d{4}-\d\d-\d\dT[\d-]+Z-app\.example\.com\.png$/);
+});
+
+test('nudgit:screenshot reports failures without downloading', async () => {
+  const api = createChrome();
+  api.debugger.attachError = new Error('Cannot attach to this target.');
+  const res = /** @type {any} */ (await handleMessage(api, { type: 'nudgit:screenshot', url: 'https://a.test/' }, { id: 'test-ext', tab: { id: 5 } }));
+  assert.deepEqual(res, { ok: false, error: 'Cannot attach to this target.' });
+  assert.equal(api.calls.download.length, 0);
+});
+
+test('screenshotFilename uses a sortable timestamp and the page host', () => {
+  const date = new Date('2026-10-14T12:30:05.123Z');
+  assert.equal(SCREENSHOT_DIR, 'nudgit-screenshots');
+  assert.equal(screenshotFilename(date, 'https://app.example.com:8443/a'), 'nudgit-screenshots/2026-10-14T12-30-05-123Z-app.example.com.png');
+  assert.equal(screenshotFilename(date, 'not a url'), 'nudgit-screenshots/2026-10-14T12-30-05-123Z-page.png');
+  assert.equal(screenshotFilename(date, 'file:///tmp/x.html'), 'nudgit-screenshots/2026-10-14T12-30-05-123Z-page.png');
+});
+
+test('a failed re-injection also detaches a running recording', async () => {
+  const api = createChrome({ failTabs: [5] });
+  api.debugger.attached.add(5);
+  await reinjectTab(api, 5);
+  assert.equal(api.debugger.attached.size, 0);
+});
+
+test('when Chrome detaches the debugger (bar dismissed) the overlay is told to stop recording', async () => {
+  const api = createChrome();
+  registerListeners(api);
+  await api.listeners.onDetach[0]({ tabId: 5 }, 'canceled_by_user');
+  await api.listeners.onDetach[0]({ targetId: 'x' }, 'target_closed'); // not a tab: ignored
+  assert.deepEqual(api.calls.sendMessage, [[5, { type: 'nudgit:recording-stopped' }]]);
 });

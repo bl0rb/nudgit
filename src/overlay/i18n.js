@@ -29,6 +29,8 @@ const MESSAGES = {
     'toolbar.changeUrl': 'Change URL',
     'toolbar.close': 'Close nudgit',
     'toolbar.language': 'Language',
+    'toolbar.record': '● Record',
+    'toolbar.recordTitle': 'Save a full-page screenshot on every click',
 
     'import.chooseFile': 'Choose file…',
     'import.loadLastExport': 'Load last export',
@@ -38,6 +40,8 @@ const MESSAGES = {
 
     'toast.saved': 'Saved: {name}',
     'toast.downloaded': 'Downloaded: ui-changes.md',
+    'toast.recordingOn': 'Recording: every click saves a screenshot to Downloads/nudgit-screenshots',
+    'toast.screenshotFailed': 'Screenshot failed: {name}',
     'toast.exportFailed': 'Export failed: {name}',
     'toast.copied': 'Copied',
     'toast.copyFailed': 'Copy failed',
@@ -122,6 +126,8 @@ const MESSAGES = {
     'toolbar.changeUrl': 'Andere URL',
     'toolbar.close': 'nudgit schließen',
     'toolbar.language': 'Sprache',
+    'toolbar.record': '● Aufnahme',
+    'toolbar.recordTitle': 'Bei jedem Klick einen ganzseitigen Screenshot speichern',
 
     'import.chooseFile': 'Datei wählen…',
     'import.loadLastExport': 'Letzten Export laden',
@@ -131,6 +137,8 @@ const MESSAGES = {
 
     'toast.saved': 'Gespeichert: {name}',
     'toast.downloaded': 'Heruntergeladen: ui-changes.md',
+    'toast.recordingOn': 'Aufnahme läuft: jeder Klick speichert einen Screenshot in Downloads/nudgit-screenshots',
+    'toast.screenshotFailed': 'Screenshot fehlgeschlagen: {name}',
     'toast.exportFailed': 'Export fehlgeschlagen: {name}',
     'toast.copied': 'Kopiert',
     'toast.copyFailed': 'Kopieren fehlgeschlagen',

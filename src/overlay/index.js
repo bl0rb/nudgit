@@ -12,7 +12,7 @@ import { createPositionTracker } from './position-tracker.js';
 import { openPalettePopover } from './palette-popover.js';
 import { openImportPopover } from './import-popover.js';
 import { runAction } from './actions/index.js';
-import { detectExtensionMode, downloadViaExtension, notifyVisibility } from './extension.js';
+import { detectExtensionMode, downloadViaExtension, notifyVisibility, createClickRecorder } from './extension.js';
 import { t } from './i18n.js';
 
 /**
@@ -53,6 +53,8 @@ import { t } from './i18n.js';
  * @property {() => void} resync
  * @property {() => boolean} isVisible
  * @property {(visible: boolean) => void} setVisible - hide = Interact mode + DOM preview reverted + host hidden; show = unhide + full re-render
+ * @property {() => boolean} isRecording - extension only: a full-page screenshot is saved on every page click
+ * @property {() => void} toggleRecording
  */
 
 /**
@@ -221,6 +223,10 @@ function initOverlay() {
     startPlaceMode: (entry) => selectionApi.startPlaceMode(entry),
     resync: () => renderFull(),
     isVisible: () => overlayVisible,
+    isRecording: () => Boolean(recorder && recorder.isOn()),
+    toggleRecording: () => {
+      if (recorder) void recorder.setOn(!recorder.isOn());
+    },
     setVisible: (visible) => {
       const next = Boolean(visible);
       if (next === overlayVisible) return;
@@ -234,11 +240,14 @@ function initOverlay() {
         selectionApi.cancelPlaceMode();
         lastPreviewResults = previewSync([], document);
         host.style.setProperty('display', 'none', 'important');
+        if (recorder) void recorder.setOn(false);
       }
       if (extensionMode) void notifyVisibility(globalThis.chrome, next);
     },
   };
 
+  /** @type {ReturnType<typeof createClickRecorder>|null} */
+  let recorder = null;
   const toolbarApi = createToolbar(ctx);
   const panel = createPanel(ctx);
   const selectionApi = createSelection(ctx);
@@ -257,6 +266,19 @@ function initOverlay() {
   // ctx.createLocator/panel's "selected element" section) — that mutates
   // the target page (see preview.js's withOriginalDom) and would re-trigger
   // this very MutationObserver-driven tracker, looping forever.
+  if (extensionMode) {
+    recorder = createClickRecorder({
+      chromeApi: globalThis.chrome,
+      win: window,
+      host,
+      onChange: (on) => {
+        renderUiOnly();
+        if (on) ctx.toast(t('toast.recordingOn'));
+      },
+      onError: (message) => ctx.toast(t('toast.screenshotFailed', { name: message }), { error: true }),
+    });
+  }
+
   const tracker = createPositionTracker(() => {
     // The app can remove the selected/edited element outright (e.g. a
     // re-render). Detect that here too, not only in renderUiOnly, since the

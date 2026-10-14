@@ -72,6 +72,13 @@ export function createToolbar(ctx) {
   langBtn.setAttribute('aria-label', t('toolbar.language'));
 
   body.append(modeBtn, sep(doc), undoBtn, redoBtn, sep(doc), addBtn, changesBtn, sep(doc), exportBtn, copyBtn, importBtn, sep(doc), discardBtn, sep(doc), langBtn);
+  /** @type {HTMLButtonElement|null} */
+  let recordBtn = null;
+  if (ctx.extensionMode) {
+    recordBtn = button(doc, t('toolbar.record'), () => ctx.toggleRecording());
+    recordBtn.title = t('toolbar.recordTitle');
+    body.append(sep(doc), recordBtn);
+  }
   if (ctx.proxyMode) {
     const otherUrlBtn = button(doc, t('toolbar.changeUrl'), () => {
       win.location.href = '/__uce/';
@@ -155,6 +162,7 @@ export function createToolbar(ctx) {
     changesBtn.append(count);
     langBtn.textContent = getLang().toUpperCase();
     langBtn.title = t('toolbar.language');
+    if (recordBtn) recordBtn.classList.toggle('uce-active', ctx.isRecording());
   }
 
   return { el, toastEl, update, showToast };

@@ -82,7 +82,7 @@ test('buildExtension assembles extension/ + overlay/ with the package version an
     assert.equal(manifest.name, 'nudgit');
     assert.equal(manifest.description, pkg.description);
     assert.equal(manifest.version, pkg.version);
-    assert.deepEqual(manifest.permissions, ['activeTab', 'scripting', 'storage', 'downloads']);
+    assert.deepEqual(manifest.permissions, ['activeTab', 'scripting', 'storage', 'downloads', 'debugger']);
     assert.equal(manifest.host_permissions, undefined, 'no host permissions');
     assert.equal(manifest.background.service_worker, 'service-worker.js');
     assert.equal(manifest.background.type, 'module');

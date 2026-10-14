@@ -163,6 +163,10 @@ should be written straight into the target repo.
   page's `localStorage`, so showing it again restores them.
 - **Export** opens the browser's Save dialog for `ui-changes.md` (there is no
   repo to write to); **Import** reads a saved file ("Choose file...").
+- **● Record** (extension only): every click on the page saves a full-page
+  screenshot to `Downloads/nudgit-screenshots/` (no dialog; clicks on the
+  nudgit toolbar don't count). Stays on across reloads in that tab until you
+  click it again, close nudgit or dismiss Chrome's debugging bar.
 - After a reload nudgit re-attaches by itself as long as Chrome still grants
   access to the tab; after a redirect to another origin (SSO) click the icon
   again. It cannot run on `chrome://` pages or the Chrome Web Store.
@@ -174,7 +178,8 @@ should be written straight into the target repo.
 | `activeTab` | Access to a tab only after you click the icon or use the shortcut. There are no host permissions; nudgit never runs on pages you did not activate. |
 | `scripting` | Injects nudgit into that tab. |
 | `storage` | Remembers for the browser session which tabs have nudgit on (to re-attach after reloads). |
-| `downloads` | Saves `ui-changes.md` through the Save dialog. |
+| `downloads` | Saves `ui-changes.md` through the Save dialog, and record-mode screenshots to `Downloads/nudgit-screenshots/`. |
+| `debugger` | Only while **● Record** is on: captures a full-page screenshot on every click. Chrome shows its "started debugging this browser" bar during that time; dismissing it stops recording. |
 
 Nothing is sent anywhere; the extension has no network access of its own.
 
